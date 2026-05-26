@@ -105,5 +105,8 @@ class UsageTracker:
         return min(estimated_tokens / max_tokens * 100, 100.0)
 
     def save(self) -> None:
+        dir_name = os.path.dirname(self._path)
+        if dir_name:
+            os.makedirs(dir_name, exist_ok=True)
         with open(self._path, "w", encoding="utf-8") as f:
             json.dump(self._data, f, ensure_ascii=False, indent=2)

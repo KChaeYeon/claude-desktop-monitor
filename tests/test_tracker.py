@@ -42,7 +42,7 @@ def test_session_pct_after_start():
         tracker = UsageTracker(path, session_hours=5)
         tracker.mark_session_start()
         pct = tracker.session_pct
-        assert 0.0 <= pct <= 1.0
+        assert 0.0 <= pct < 0.1
     finally:
         if os.path.exists(path):
             os.unlink(path)
@@ -100,6 +100,21 @@ def test_tracker_persists_across_instances():
         t2 = UsageTracker(path, session_hours=5)
         assert t2.weekly_active_minutes == 30
         assert t2.session_reset_time is not None
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
+
+def test_override_reset_time():
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        path = f.name
+    os.unlink(path)
+    try:
+        tracker = UsageTracker(path, session_hours=5)
+        tracker.mark_session_start()
+        from datetime import timezone
+        override_dt = datetime(2030, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        tracker.override_reset_time(override_dt)
+        assert tracker.session_reset_time == override_dt
     finally:
         if os.path.exists(path):
             os.unlink(path)
