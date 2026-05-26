@@ -1,0 +1,2 @@
+uiautomation>=2.0.18
+pytest>=7.0
