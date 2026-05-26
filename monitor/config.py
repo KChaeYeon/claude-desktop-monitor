@@ -3,7 +3,7 @@ import json
 import os
 from dataclasses import dataclass, asdict
 
-PLAN_LIMITS: dict[str, dict] = {
+PLAN_LIMITS: dict[str, dict[str, int]] = {
     "free":    {"session_hours": 1},
     "pro":     {"session_hours": 5},
     "max_5x":  {"session_hours": 5},
@@ -24,10 +24,16 @@ class AppConfig:
 def load_config(path: str) -> AppConfig | None:
     if not os.path.exists(path):
         return None
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    return AppConfig(**data)
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return AppConfig(**data)
+    except json.JSONDecodeError:
+        return None
 
 def save_config(cfg: AppConfig, path: str) -> None:
+    dirname = os.path.dirname(path)
+    if dirname:
+        os.makedirs(dirname, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(asdict(cfg), f, ensure_ascii=False, indent=2)
