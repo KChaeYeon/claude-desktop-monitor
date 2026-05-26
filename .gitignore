@@ -1,0 +1,11 @@
+config.json
+tracker.json
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.superpowers/
