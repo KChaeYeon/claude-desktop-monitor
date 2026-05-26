@@ -36,6 +36,11 @@ class StateMachine:
             self._done_since = None
             return self.state
 
+        # Exit LIMIT_REACHED when rate limit clears
+        if self.state == AppState.LIMIT_REACHED:
+            self.state = AppState.IDLE
+            return self.state
+
         if snap.is_streaming:
             self.state = AppState.WRITING
             self._done_since = None
@@ -55,5 +60,6 @@ class StateMachine:
             if self._done_since and time.time() - self._done_since > self.DONE_TIMEOUT:
                 self.state = AppState.IDLE
                 self._done_since = None
+                return self.state
 
         return self.state

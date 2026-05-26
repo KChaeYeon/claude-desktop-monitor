@@ -60,3 +60,15 @@ def test_done_reverts_to_idle_after_30s():
     sm._done_since = time.time() - 31
     sm.update(idle_snap)
     assert sm.state == AppState.IDLE
+
+def test_limit_reached_exits_when_rate_limit_clears():
+    sm = StateMachine()
+    limit_snap = UISnapshot(app_running=True, is_loading=False, is_streaming=False,
+                            rate_limit_text="resets 3:40pm", conversation_char_count=0)
+    sm.update(limit_snap)
+    assert sm.state == AppState.LIMIT_REACHED
+
+    clear_snap = UISnapshot(app_running=True, is_loading=False, is_streaming=False,
+                            rate_limit_text=None, conversation_char_count=0)
+    sm.update(clear_snap)
+    assert sm.state == AppState.IDLE
