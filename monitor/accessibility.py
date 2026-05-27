@@ -1,5 +1,6 @@
 from __future__ import annotations
 import re
+from PIL import ImageGrab, ImageChops
 from monitor.state_machine import UISnapshot
 
 try:
@@ -8,69 +9,68 @@ try:
 except ImportError:
     _UIA_AVAILABLE = False
 
-CLAUDE_WINDOW_NAMES = ("Claude", "Claude -")
+try:
+    import pytesseract
+    _OCR_AVAILABLE = True
+except ImportError:
+    _OCR_AVAILABLE = False
+
+_prev_img = None
 
 
 def _find_claude_window():
-    """Claude Desktop App 창을 찾아 반환. 없으면 None."""
     if not _UIA_AVAILABLE:
         return None
     root = auto.GetRootControl()
     for ctrl in root.GetChildren():
         name = ctrl.Name or ""
-        if any(name == n or name.startswith(n + " ") for n in CLAUDE_WINDOW_NAMES):
+        if name == "Claude" or name.startswith("Claude "):
             return ctrl
     return None
 
 
-def _find_stop_button(window) -> bool:
-    """'Stop' 버튼 또는 생성 중 표시 요소 존재 여부 반환."""
+def _capture_window(window):
     try:
-        btn = window.ButtonControl(searchDepth=15, Name="Stop")
-        if btn.Exists(0, 0):
-            return True
-        btn2 = window.ButtonControl(searchDepth=15, Name="Stop generating")
-        return btn2.Exists(0, 0)
+        r = window.BoundingRectangle
+        return ImageGrab.grab(bbox=(r.left, r.top, r.right, r.bottom), all_screens=True)
+    except Exception:
+        return None
+
+
+def _images_differ(img1, img2) -> bool:
+    """대화 영역(상단 10% 제외)의 픽셀 변화를 비교한다."""
+    try:
+        w, h = img1.size
+        crop = (0, int(h * 0.1), w, h)
+        a = img1.crop(crop).convert("L")
+        b = img2.crop(crop).convert("L")
+        diff = ImageChops.difference(a, b)
+        pixels = list(diff.getdata())
+        return sum(pixels) / len(pixels) > 2.0
     except Exception:
         return False
 
 
-def _get_conversation_text_length(window) -> int:
-    """대화 영역 텍스트 전체 길이 추정 (토큰 계산에 사용)."""
+def _ocr_rate_limit(img) -> str | None:
+    if not _OCR_AVAILABLE:
+        return None
     try:
-        total = 0
-        for ctrl in window.GetChildren():
-            name = ctrl.Name or ""
-            total += len(name)
-        return total
-    except Exception:
-        return 0
-
-
-def _find_rate_limit_text(window) -> str | None:
-    """rate limit 메시지 텍스트 탐색. 'resets X:XXam/pm' 패턴 포함 시 반환."""
-    pattern = re.compile(r'resets\s+\d{1,2}:\d{2}(?:am|pm)', re.IGNORECASE)
-    try:
-        def search(ctrl, depth=0):
-            if depth > 20:
-                return None
-            name = ctrl.Name or ""
-            if pattern.search(name):
-                return name
-            for child in ctrl.GetChildren():
-                result = search(child, depth + 1)
-                if result:
-                    return result
-            return None
-        return search(window)
+        text = pytesseract.image_to_string(img, lang="kor+eng")
+        match = re.search(r'resets?\s+\d{1,2}:\d{2}\s*(?:am|pm)', text, re.IGNORECASE)
+        if match:
+            start = max(0, match.start() - 50)
+            return text[start:match.end() + 50]
+        return None
     except Exception:
         return None
 
 
 def get_snapshot(prev_char_count: int = 0) -> UISnapshot:
-    """Claude Desktop App UI를 폴링해 UISnapshot을 반환한다."""
+    global _prev_img
+
     window = _find_claude_window()
     if window is None:
+        _prev_img = None
         return UISnapshot(
             app_running=False,
             is_loading=False,
@@ -79,15 +79,27 @@ def get_snapshot(prev_char_count: int = 0) -> UISnapshot:
             conversation_char_count=0,
         )
 
-    rate_limit_text = _find_rate_limit_text(window)
-    stop_active = _find_stop_button(window)
-    char_count = _get_conversation_text_length(window)
-    is_streaming = stop_active and char_count > prev_char_count
-    is_loading = stop_active and not is_streaming
+    img = _capture_window(window)
+    if img is None:
+        return UISnapshot(
+            app_running=True,
+            is_loading=False,
+            is_streaming=False,
+            rate_limit_text=None,
+            conversation_char_count=0,
+        )
+
+    is_streaming = _prev_img is not None and _images_differ(_prev_img, img)
+    _prev_img = img
+
+    rate_limit_text = _ocr_rate_limit(img)
+
+    # 화면 변화량을 char_count 대용으로 사용 (context % 추정)
+    char_count = prev_char_count + 50 if is_streaming else prev_char_count
 
     return UISnapshot(
         app_running=True,
-        is_loading=is_loading,
+        is_loading=False,
         is_streaming=is_streaming,
         rate_limit_text=rate_limit_text,
         conversation_char_count=char_count,
@@ -95,7 +107,6 @@ def get_snapshot(prev_char_count: int = 0) -> UISnapshot:
 
 
 def debug_dump_tree(max_depth: int = 5) -> None:
-    """Claude 앱 UI 트리를 콘솔에 출력 (디버깅용)."""
     window = _find_claude_window()
     if window is None:
         print("Claude Desktop App 창을 찾을 수 없습니다.")

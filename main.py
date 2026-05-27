@@ -69,7 +69,7 @@ def main() -> None:
         prev_char_count = snap.conversation_char_count
         state = sm.update(snap)
 
-        if state == AppState.THINKING and prev_state == AppState.IDLE:
+        if state in (AppState.THINKING, AppState.WRITING) and prev_state == AppState.IDLE:
             tracker.mark_session_start()
 
         if state == AppState.LIMIT_REACHED and snap.rate_limit_text:
