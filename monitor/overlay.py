@@ -1,6 +1,5 @@
 from __future__ import annotations
 import tkinter as tk
-from datetime import datetime, timezone
 from typing import Callable
 from monitor.state_machine import AppState
 
