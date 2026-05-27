@@ -46,7 +46,7 @@ def _images_differ(img1, img2) -> bool:
         b = img2.crop(crop).convert("L")
         diff = ImageChops.difference(a, b)
         pixels = list(diff.getdata())
-        return sum(pixels) / len(pixels) > 2.0
+        return sum(pixels) / len(pixels) > 0.5
     except Exception:
         return False
 

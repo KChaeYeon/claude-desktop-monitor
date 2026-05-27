@@ -69,12 +69,25 @@ class UsageTracker:
         start_dt = datetime.fromisoformat(start)
         return start_dt + timedelta(hours=self._session_hours)
 
-    @property
-    def session_pct(self) -> float:
+    def session_is_valid(self) -> bool:
+        """현재 세션이 시작됐고 아직 만료되지 않았으면 True."""
         start = self._data.get("session_start")
         if not start:
-            return 0.0
+            return False
         start_dt = datetime.fromisoformat(start)
+        elapsed = (datetime.now(timezone.utc) - start_dt).total_seconds()
+        if elapsed > self._session_hours * 3600:
+            self._data["session_start"] = None
+            self._data["session_reset_override"] = None
+            self.save()
+            return False
+        return True
+
+    @property
+    def session_pct(self) -> float:
+        if not self.session_is_valid():
+            return 0.0
+        start_dt = datetime.fromisoformat(self._data["session_start"])
         elapsed = (datetime.now(timezone.utc) - start_dt).total_seconds()
         total = self._session_hours * 3600
         return min(elapsed / total * 100, 100.0)

@@ -52,6 +52,12 @@ def main() -> None:
     prev_char_count = 0
     prev_state = AppState.IDLE
 
+    # Claude가 이미 실행 중이면 세션 타이머 즉시 시작 (기존 유효한 세션은 유지)
+    if not tracker.session_is_valid():
+        initial_snap = get_snapshot(0)
+        if initial_snap.app_running:
+            tracker.mark_session_start()
+
     overlay = MonitorOverlay(
         on_position_change=lambda x, y: (
             setattr(cfg, "window_x", x),
